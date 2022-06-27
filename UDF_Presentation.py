@@ -23,9 +23,17 @@
 # COMMAND ----------
 
 # MAGIC %md
-# MAGIC ## When should you use a UDF?
-# MAGIC You would want to use a pandas UDF when the data set is smaller because pandas udfs only utelize one node at a time.
-# MAGIC ### Python UDF:
+# MAGIC ## Pandas UDF
+# MAGIC 
+# MAGIC More efficient than pyspark udf.
+# MAGIC 
+# MAGIC Does not need to be converted to pandas dataframe to use
+# MAGIC 
+# MAGIC 
+# MAGIC 
+# MAGIC Below is a chart from [databricks blog](https://databricks.com/blog/2017/10/30/introducing-vectorized-udfs-for-pyspark.html) that compares functions being made using pyspark udf vs pandas udf
+# MAGIC 
+# MAGIC ![Comparison chart](https://databricks.com/wp-content/uploads/2017/10/image1-4.png)
 
 # COMMAND ----------
 
@@ -49,13 +57,19 @@ targets.printSchema()
 
 # COMMAND ----------
 
+from pyspark.sql.functions import udf
+import pyspark.sql.functions as F
+
+F.udf
+
 df1 = targets
+
 
 def convertCase(string):
   return string.lower()
 
 # Converting the convertCase() function to a UDF
-convertUDF = udf(lambda x: convertCase(x))
+convertUDF = udf(lambda x: convertCase(x),'string')
 
 # Using select column.
 df1.select(col("ticker"), convertUDF(col("ticker")).alias("ticker_lower")).show(truncate=False)
@@ -96,7 +110,7 @@ def plus_one(v):
       return v + 1
 df = df.withColumn('float_quarter_num', plus_one(df.quarter_num))
 
-@udf('float')
+# @udf('float')
 def plus_one(v):
       return v + 1.0 # must return the corresponding type
 df = df.withColumn('float2_quarter_num', plus_one(df.quarter_num))
@@ -109,10 +123,17 @@ df.printSchema()
 
 # COMMAND ----------
 
-@udf('string')
-def concat_ticker_quarter(ticker,quarter_num):
-      return ticker+str(quarter_num)
-df = df.withColumn('ticker_quarter_num', concat_ticker_quarter(df.ticker,df.quarter_num))
+from pyspark.sql.functions import pandas_udf, PandasUDFType
+
+df = targets
+
+@pandas_udf('integer')
+def plus_one(v):
+      return v + 1
+df = df.withColumn('int_quarter_num', plus_one(df.quarter_num))
+
+# COMMAND ----------
+
 df.display()
 
 # COMMAND ----------
@@ -184,4 +205,14 @@ display(months)
 
 # COMMAND ----------
 
+import pandas as pd
+from scipy import stats
 
+months = spark.sql('SELECT * FROM monthly_all.monthly_patterns')
+
+@pandas_udf('double')
+def cdf(v):
+    return pd.Series(stats.norm.cdf(v))
+
+
+display(months.withColumn('cumulative_probability', cdf(months.median_dwell)))
